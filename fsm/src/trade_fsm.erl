@@ -14,8 +14,8 @@ start_link(Name) ->
   gen_fsm:start_link(?MODULE, [Name], []).
 
 trade(Self, Other) ->
-  gen_fsm:sync_send_event(Self, {negotiate, Other}, 30000).
-
+  gen_fsm:sync_send_event(Self, {negotiate, Other}).
+%% check that here is actually self or other
 accept_trade(Self) ->
   gen_fsm:sync_send_event(Self, accept_negotiate).
 
@@ -80,7 +80,8 @@ idle(Event, Data) ->
   {next_state, idle, Data}.
 
 idle({negotiate, Other}, From, S=#state{}) ->
-  ask_negotiate(Other, self()),
+  %% ask_negotiate(Other, self()),
+  ask_negotiate(self(), Other),
   notice(S, "asks ~p to start trading", [Other]),
   Ref = monitor(process, Other),
   {next_state, idle_wait, S#state{other=Other, monitor=Ref, from=From}};
@@ -119,10 +120,10 @@ negotiate({retract_offer, Item}, S=#state{ownitems=OwnItems}) ->
   {next_state, negotiate, S#state{ownitems=remove(Item, OwnItems)}};
 negotiate({do_offer, Item}, S=#state{otheritems=OtherItems}) ->
   notice(S, "other player offer ~p", [Item]),
-  {next_state, negotiate, S=#state{otheritems=add(Item, OtherItems)}};
+  {next_state, negotiate, S#state{otheritems=add(Item, OtherItems)}};
 negotiate({undo_offer, Item}, S=#state{otheritems=OtherItems}) ->
   notice(S, "other player undo offer ~p", [Item]),
-  {next_state, negotiate, S=#state{otheritems=remove(Item, OtherItems)}};
+  {next_state, negotiate, S#state{otheritems=remove(Item, OtherItems)}};
 
 negotiate(are_you_ready, S=#state{other=Other}) ->
   io:format("Other player want to trade ~n"),
@@ -184,6 +185,8 @@ ready(ack, S=#state{}) ->
     false ->
       {next_state, ready, S}
    end;
+ready(ready_for_trade, S) ->
+  {next_state, ready, S};
 ready(Event, Data) ->
   unexpected(Event, ready),
   {next_state, ready, Data}.
@@ -236,12 +239,16 @@ terminate(_Reason, _StateName, _StateData) ->
   ok.
 
 add(Item, Items) ->
+  io:format("adding: ~p to ~p ~n", [Item, Items]),
   [Item|Items].
 remove(Item, Items) ->
+  io:format("removing: ~p from ~p ~n", [Item, Items]),
   Items -- [Item].
 
-notice(#state{name=N}, Str, Args) ->
-  io:format("~s: " ++ Str ++ "~n", [N|Args]).
+notice(S=#state{}, Str, Args) ->
+  io:format("~s: " ++ Str ++ "~n", [S#state.name | Args]),
+  io:format("Items1: ~p~n", [S#state.ownitems]),
+  io:format("Items2: ~p~n", [S#state.otheritems]).
 
 unexpected(Msg, State=#state{}) ->
   io:format("~p got unexpected message ~p in state ~p on ~p~n", [self(), Msg, State, State#state.name]).
