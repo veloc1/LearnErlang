@@ -15,7 +15,7 @@ start_link(Name) ->
 
 trade(Self, Other) ->
   gen_fsm:sync_send_event(Self, {negotiate, Other}).
-%% check that here is actually self or other
+  
 accept_trade(Self) ->
   gen_fsm:sync_send_event(Self, accept_negotiate).
 
