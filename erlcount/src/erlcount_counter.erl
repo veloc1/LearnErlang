@@ -1,25 +1,23 @@
 %% @author Dell
-%% @doc @todo Add description to ppool_nagger.
+%% @doc @todo Add description to erlcount_counter.
 
 
--module(ppool_nagger).
+-module(erlcount_counter).
 -behaviour(gen_server).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([start_link/4, stop/1]).
+-export([start_link/4]).
 
-start_link(Task, Delay, Max, SendTo) ->
-	gen_server:start_link(?MODULE, {Task, Delay, Max, SendTo}, []).
-
-stop(Pid) -> 
-	gen_server:call(Pid, stop).
+start_link(DispatcherPid, Ref, FileName, Regex) ->
+	gen_server:start_link(?MODULE, [DispatcherPid, Ref, FileName, Regex], []).
 
 %% ====================================================================
 %% Behavioural functions
 %% ====================================================================
+-record(state, {dispatcher, ref, file, re}).
 
 %% init/1
 %% ====================================================================
@@ -33,8 +31,9 @@ stop(Pid) ->
 	State :: term(),
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-init({Task, Delay, Max, SendTo}) ->
-    {ok, {Task, Delay, Max, SendTo}, Delay}.
+init([DispatcherPid, Ref, FileName, Regex]) ->
+	self() ! start,
+	{ok, #state{dispatcher=DispatcherPid, ref=Ref, file=FileName, re=Regex}}.
 
 
 %% handle_call/3
@@ -54,12 +53,8 @@ init({Task, Delay, Max, SendTo}) ->
 	Timeout :: non_neg_integer() | infinity,
 	Reason :: term().
 %% ====================================================================
-handle_call(stop, _From, State) ->
-    {stop, normal, ok, State};
-handle_call(Request, _From, State) ->
-	io:format("unexpected message ~p~n", [Request]),
-    Reply = ok,
-    {reply, Reply, State}.
+handle_call(_Request, _From, State) ->
+    {noreply, State}.
 
 
 %% handle_cast/2
@@ -88,18 +83,11 @@ handle_cast(_Msg, State) ->
 	NewState :: term(),
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-handle_info(timeout, {Task, Delay, Max, SendTo}) ->
-	SendTo ! {self(), Task},
-    if Max =:= infinity ->
-	  {noreply, {Task, Delay, Max, SendTo}, Delay};
-	Max =< 1 ->
-		{stop, normal, {Task, Delay, 0, SendTo}};
-	Max > 1 ->
-  		{noreply, {Task, Delay, Max - 1, SendTo}, Delay}
-    end;
-handle_info(_Info, State) ->
-    {noreply, State}.
-
+handle_info(start, S=#state{re=Re, ref=Ref}) ->
+	{ok, Bin} = file:read_file(S#state.file),
+	Count = erlcount_lib:regex_count(Re, Bin),
+	erlcount_dispatch:complete(S#state.dispatcher, Re, Ref, Count),
+	{stop, normal, S}.
 
 %% terminate/2
 %% ====================================================================

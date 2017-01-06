@@ -1,0 +1,7 @@
+{application, echo_tcp,
+  [
+    {vsn, "1.0.0"},
+    {modules, [echo_tcp, echo_tcp_server]},
+    {registered, [echo_tcp]},
+    {mod, {echo_tcp, []}}
+  ]}.
